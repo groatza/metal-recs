@@ -1,7 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-axios.get('https://www.metal-archives.com/bands/Electric_Wizard') 
+axios.get('https://www.metal-archives.com/bands/Electric_Wizard') //initial bands
 	.then(({ data }) => {
         const $ = cheerio.load(data);
 
@@ -10,7 +10,7 @@ axios.get('https://www.metal-archives.com/bands/Electric_Wizard')
         
         return axios.get(`https://www.metal-archives.com/band/ajax-recommendations/id/${bandID}`);
   })
-  .then(({ data }) => {
+  .then(({ data }) => { //similar bands
     const $ = cheerio.load(data);
 
     const bandEntries = [];
@@ -20,6 +20,7 @@ axios.get('https://www.metal-archives.com/bands/Electric_Wizard')
 
       rowData.bandName = $row.find('td:nth-child(1) a').text();
       rowData.bandLink = $row.find('td:nth-child(1) a').attr('href');
+      rowData.bandID = rowData.bandLink.split("/").pop();
       rowData.country = $row.find('td:nth-child(2)').text();
       rowData.genre = $row.find('td:nth-child(3)').text();
       rowData.score = $row.find('td:nth-child(4) span').text();
@@ -31,7 +32,8 @@ axios.get('https://www.metal-archives.com/bands/Electric_Wizard')
 
     const promises = bandEntries.map(entry => {
         const bandLink = entry.bandLink;
-        return axios.get(bandLink)
+        const bandID = entry.bandID;
+        return axios.get(`https://www.metal-archives.com/band/discography/id/${bandID}/tab/all`)
           .then(({ data }) => {
             const $ = cheerio.load(data);
             const highestRatedAlbum = {
@@ -41,18 +43,24 @@ axios.get('https://www.metal-archives.com/bands/Electric_Wizard')
                 score : 0,
             };
 
-            $('.discog tr').each((_, row) => { //each album
+            $('tbody tr').each((_, row) => { //each album
                 const $row = $(row);
                 let rating = $row.find('td:nth-child(4) a').text();
-                const [numRatings, score] = rating.split(" ").map(value => parseInt(value));
+                //const [numRatings, score] = rating.split(" ").map(value => parseInt(value));
+                if (rating) {
+                  var [numRatings, score] = rating.split(" ");
+                  score = score.slice(1, -2);
+                } else {
+                  var numRatings = 0;
+                  var score = 0;
+                }
 
-                if ( numRatings > highestRatedAlbum.numRatings || (numRatings == highestRatedAlbum.numRatings && score > highestRatedAlbum.score) ) { //fix for %
+                if ( numRatings > highestRatedAlbum.numRatings || (numRatings == highestRatedAlbum.numRatings && score > highestRatedAlbum.score) ) { //build better algorithm
                     highestRatedAlbum.name = $row.find('td:nth-child(1) a').text();
                     highestRatedAlbum.year = $row.find('td:nth-child(3)').text();
                     highestRatedAlbum.numRatings = numRatings;
                     highestRatedAlbum.score = score;
                 }
-                highestRatedAlbum.name = "cum";
             });
             entry.highestRatedAlbum = highestRatedAlbum;
             return entry;
